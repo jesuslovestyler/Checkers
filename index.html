@@ -14,6 +14,7 @@
         --ink-soft: #6b5d52;
         --line: #ddd2bf;
         --gold: #b98a2f;
+        --hint-ink: #7c4d0d;
         --sq-light: #f0dcc0;
         --sq-dark: #9c3d33;
         --sq-dark-edge: #7e2f27;
@@ -36,6 +37,7 @@
           --ink-soft: #b8a891;
           --line: #3d332a;
           --gold: #d9ab4a;
+          --hint-ink: #eec26a;
           --sq-light: #d9bd8f;
           --sq-dark: #7c2d24;
           --sq-dark-edge: #5f2019;
@@ -200,6 +202,18 @@
         transform: scale(1.06);
       }
       .piece.mustjump { outline: 3px dashed rgba(255, 217, 77, 0.85); outline-offset: -2px; }
+      @keyframes mustjump-pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.16); }
+      }
+      .piece.pulse {
+        animation: mustjump-pulse 0.45s ease-in-out 3;
+        outline: 4px solid var(--sel);
+        outline-offset: -2px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .piece.pulse { animation: none; }
+      }
       .status {
         text-align: center;
         font-size: 20px;
@@ -214,6 +228,14 @@
         min-height: 20px;
         margin: 0 0 6px;
         font-style: italic;
+      }
+      .hint {
+        text-align: center;
+        font-size: 15.5px;
+        font-weight: 700;
+        color: var(--hint-ink);
+        min-height: 22px;
+        margin: 0 0 4px;
       }
       .captured-row {
         display: flex;
@@ -306,6 +328,7 @@
           </div>
           <p class="status" id="status"></p>
           <p class="status-sub" id="statusSub"></p>
+          <p class="hint" id="hint" role="status" aria-live="polite"></p>
           <div class="captured-row">
             <span id="capByRed"></span>
             <span id="capByBlack"></span>
@@ -594,6 +617,12 @@
       var SAVE_KEY = "checkers-game-v1";
       var S = null;
       var animating = false;
+      /* Transient tap feedback: a hint line by the board and a pulse on the
+         piece(s) that must jump. Purely presentational — never saved. */
+      var hintText = "";
+      var hintTimer = null;
+      var pulseSquares = {};
+      var pulseTimer = null;
 
       function freshState() {
         return {
@@ -660,6 +689,7 @@
         S.lastMove = { from: move.path[0], to: move.path[move.path.length - 1] };
         S.quietPlies = wasCapture ? 0 : S.quietPlies + 1;
         S.selected = null; S.steps = {}; S.partial = null;
+        hintText = ""; pulseSquares = {};
 
         var mover = S.turn;
         S.turn = opp(S.turn);
@@ -761,9 +791,39 @@
         var steps = legalStepsFor(square);
         if (Object.keys(steps).length === 0) return false;
         S.selected = square; S.steps = steps;
+        hintText = ""; stopHintTimer();
         if (!silent) sndSelect();
         render();
         return true;
+      }
+      /* Squares of the side-to-move pieces that have a capture right now. */
+      function captureStarts() {
+        var set = {};
+        if (S.over || S.partial) return set;
+        var ms = genMoves(S.board, S.turn);
+        for (var m = 0; m < ms.length; m++)
+          if (ms[m].caps.length) set[ms[m].path[0]] = true;
+        return set;
+      }
+      function stopHintTimer() {
+        if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+      }
+      function showHint(msg) {
+        hintText = msg;
+        render();
+        stopHintTimer();
+        hintTimer = setTimeout(function () { hintText = ""; render(); }, 4200);
+      }
+      /* The forced-capture explanation, with the must-jump piece(s) pulsing
+         so the eye lands on the right piece. */
+      function forcedCaptureFeedback() {
+        var starts = captureStarts();
+        pulseSquares = starts;
+        if (pulseTimer) clearTimeout(pulseTimer);
+        pulseTimer = setTimeout(function () { pulseSquares = {}; render(); }, 1500);
+        showHint(Object.keys(starts).length > 1
+          ? "Captures are forced — only the ringed pieces can move. One of them has to jump!"
+          : "Captures are forced — only the ringed piece can move. It has to jump!");
       }
       /* Attempt one step from the selected square to dest. Returns true if accepted.
          A non-capturing step while a capture exists is refused (never offered). */
@@ -778,6 +838,7 @@
         var startPiece = S.board[move.path[0]];
         S.board = applyStep(S.board, move, depth);
         S.lastMove = { from: move.path[depth], to: dest };
+        hintText = ""; stopHintTimer();
         depth++;
 
         var continues = cands.some(function (m) { return m.path.length - 1 > depth; });
@@ -798,13 +859,43 @@
       function onSquareTap(i) {
         if (S.over || animating || isCpuTurn()) return;
         if (S.selected !== null && S.steps[i]) { tryStep(i); return; }
-        if (S.partial) { sndBad(); return; }   /* mid-jump: must continue with same piece */
+        if (S.partial) {
+          /* Mid-jump: only the jumping piece's glowing squares continue the turn. */
+          sndBad();
+          showHint("That piece has to keep jumping — tap one of its glowing squares.");
+          return;
+        }
         var p = S.board[i];
+        var forced = hasAnyCapture(S.board, S.turn);
         if (p && sideOf(p) === S.turn) {
-          if (i === S.selected) { S.selected = null; S.steps = {}; render(); return; }
-          if (!selectSquare(i)) sndBad();
-        } else if (S.selected !== null) {
-          sndBad();                              /* tapped a square that is not a legal move */
+          if (i === S.selected) {
+            hintText = ""; stopHintTimer();
+            S.selected = null; S.steps = {}; render();
+            return;
+          }
+          if (!selectSquare(i)) {
+            /* Own piece that may not move: say why, right now. */
+            sndBad();
+            if (forced) forcedCaptureFeedback();
+            else showHint("That piece has nowhere to go right now — try another one.");
+          }
+        } else if (p) {
+          /* Opponent's piece. */
+          sndBad();
+          if (forced) forcedCaptureFeedback();
+          else showHint("That's your opponent's piece — tap one of your own to move it.");
+        } else {
+          /* Empty square. */
+          if (S.selected !== null) {
+            sndBad();
+            showHint(forced
+              ? "Tap the glowing square to make the jump."
+              : "That isn't one of the glowing moves — tap a glowing square, or tap your piece again to put it back.");
+          } else if (forced) {
+            forcedCaptureFeedback();
+          } else {
+            showHint("Tap one of your pieces first — then tap a glowing square to move there.");
+          }
         }
       }
 
@@ -823,12 +914,14 @@
         S.lastMove = snap.lastMove;
         S.over = false; S.winner = null; S.endReason = "";
         S.selected = null; S.steps = {}; S.partial = null;
+        hintText = ""; pulseSquares = {}; stopHintTimer();
         save(); render(); maybeCpu();
       }
       function newGame() {
         var keep = { mode: S.mode, diff: S.diff, side: S.side };
         S = freshState();
         S.mode = keep.mode; S.diff = keep.diff; S.side = keep.side;
+        hintText = ""; pulseSquares = {}; stopHintTimer();
         save(); render(); maybeCpu();
       }
       /* Load an arbitrary position (used by the self-tests). */
@@ -840,6 +933,7 @@
         S.board = boardArr.slice();
         S.turn = turn;
         S.history = []; S.notations = [];
+        hintText = ""; pulseSquares = {}; stopHintTimer();
         /* Does the side to move already have no move? Then the game is over. */
         var legal = genMoves(S.board, S.turn);
         var counts = countPieces(S.board, S.turn);
@@ -856,6 +950,7 @@
       var boardEl = document.getElementById("board");
       var statusEl = document.getElementById("status");
       var statusSubEl = document.getElementById("statusSub");
+      var hintEl = document.getElementById("hint");
       var movesEl = document.getElementById("moves");
       var undoBtn = document.getElementById("undoBtn");
       var sqEls = [];
@@ -892,6 +987,7 @@
             pd.className = "piece " + (sideOf(p) === "r" ? "red" : "black") + (isKing(p) ? " king" : "");
             if (i === S.selected) pd.className += " selected";
             else if (mustJumpFrom[i] && sideOf(p) === S.turn && !isCpuTurn()) pd.className += " mustjump";
+            if (pulseSquares[i] && sideOf(p) === S.turn) pd.className += " pulse";
             el.appendChild(pd);
           }
         }
@@ -920,6 +1016,7 @@
             statusSubEl.textContent = "";
           }
         }
+        hintEl.textContent = hintText;
         /* Captured counts */
         var reds = countPieces(S.board, "r"), blacks = countPieces(S.board, "b");
         document.getElementById("capByRed").innerHTML =
@@ -1109,7 +1206,82 @@
           return !!restored && serialize(restored.board) === want && restored.turn === "b";
         });
 
-        t("9. Zero console errors so far", function () {
+        t("10. One capturer: tapping other pieces explains the forced capture, board untouched, jump still works", function () {
+          var b = emptyBoard();
+          b[idx(4, 1)] = "r"; b[idx(3, 2)] = "b";      /* the one red man that must jump to (2,3) */
+          b[idx(5, 4)] = "r"; b[idx(6, 3)] = "r"; b[idx(7, 6)] = "r";  /* three non-capturing reds */
+          b[idx(0, 1)] = "b"; b[idx(0, 7)] = "b";
+          loadPosition(b, "r", { mode: "two" });
+          var before = serialize(S.board);
+          var forcedMsg = "Captures are forced — only the ringed piece can move. It has to jump!";
+          var others = [idx(5, 4), idx(6, 3), idx(7, 6)];
+          for (var k = 0; k < others.length; k++) {
+            onSquareTap(others[k]);
+            if (serialize(S.board) !== before) return false;         /* board unchanged */
+            if (S.selected !== null) return false;                  /* nothing got selected */
+            if (window.CheckersGame.hint() !== forcedMsg) return false;
+            var pulsing = sqEls[idx(4, 1)].querySelector(".piece.pulse");
+            if (!pulsing) return false;                             /* ringed piece pulses */
+          }
+          onSquareTap(idx(3, 2));                                   /* opponent's piece: same explanation */
+          if (serialize(S.board) !== before || window.CheckersGame.hint() !== forcedMsg) return false;
+          onSquareTap(idx(4, 5));                                   /* empty square: same explanation */
+          if (serialize(S.board) !== before || window.CheckersGame.hint() !== forcedMsg) return false;
+          if (!selectSquare(idx(4, 1))) return false;               /* the ringed piece still jumps */
+          var dests = Object.keys(S.steps);
+          if (dests.length !== 1 || Number(dests[0]) !== idx(2, 3)) return false;
+          onSquareTap(idx(2, 3));
+          return S.board[idx(2, 3)] === "r" && S.board[idx(3, 2)] === EMPTY &&
+                 S.board[idx(4, 1)] === EMPTY && S.turn === "b";
+        });
+
+        t("11. Two capturers: selection switches freely, deselect works, either jump plays", function () {
+          function setup() {
+            var b = emptyBoard();
+            b[idx(4, 1)] = "r"; b[idx(3, 2)] = "b";    /* A jumps to (2,3) */
+            b[idx(4, 5)] = "r"; b[idx(3, 6)] = "b";    /* B jumps to (2,7) */
+            b[idx(0, 1)] = "b";
+            loadPosition(b, "r", { mode: "two" });
+          }
+          setup();
+          onSquareTap(idx(4, 1));
+          if (S.selected !== idx(4, 1)) return false;
+          var dA = Object.keys(S.steps);
+          if (dA.length !== 1 || Number(dA[0]) !== idx(2, 3)) return false;
+          onSquareTap(idx(4, 5));                                   /* switch to the other jumper */
+          if (S.selected !== idx(4, 5)) return false;
+          var dB = Object.keys(S.steps);
+          if (dB.length !== 1 || Number(dB[0]) !== idx(2, 7)) return false;
+          onSquareTap(idx(4, 5));                                   /* tap again: deselect */
+          if (S.selected !== null) return false;
+          onSquareTap(idx(4, 1));                                   /* back to A, play its jump */
+          if (S.selected !== idx(4, 1)) return false;
+          onSquareTap(idx(2, 3));
+          if (!(S.board[idx(2, 3)] === "r" && S.board[idx(3, 2)] === EMPTY && S.turn === "b")) return false;
+          setup();                                                  /* fresh: B's jump plays too */
+          onSquareTap(idx(4, 5));
+          if (S.selected !== idx(4, 5)) return false;
+          onSquareTap(idx(2, 7));
+          return S.board[idx(2, 7)] === "r" && S.board[idx(3, 6)] === EMPTY && S.turn === "b";
+        });
+
+        t("12. A normal turn is unaffected: quiet moves select and move as before", function () {
+          var b = emptyBoard();
+          b[idx(5, 2)] = "r"; b[idx(0, 1)] = "b"; b[idx(2, 7)] = "b";
+          loadPosition(b, "r", { mode: "two" });
+          var before = serialize(S.board);
+          onSquareTap(idx(4, 5));                                   /* empty square, nothing selected */
+          if (serialize(S.board) !== before || S.selected !== null) return false;
+          if (window.CheckersGame.hint() === "") return false;      /* still gets feedback */
+          onSquareTap(idx(5, 2));
+          if (S.selected !== idx(5, 2)) return false;
+          var dests = Object.keys(S.steps).map(Number).sort(function (x, y) { return x - y; });
+          if (dests.length !== 2 || dests[0] !== idx(4, 1) || dests[1] !== idx(4, 3)) return false;
+          onSquareTap(idx(4, 3));
+          return S.board[idx(4, 3)] === "r" && S.board[idx(5, 2)] === EMPTY && S.turn === "b";
+        });
+
+        t("13. Zero console errors so far", function () {
           return window.__errCount === 0;
         });
 
@@ -1121,6 +1293,9 @@
       window.CheckersGame = {
         runSelfTests: runSelfTests,
         genMoves: genMoves, startBoard: startBoard,
+        loadPosition: loadPosition, tap: onSquareTap,
+        serialize: serialize,
+        hint: function () { return hintText; },
         state: function () { return S; }
       };
       if (/[?&]selftest=1/.test(location.search)) {

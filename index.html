@@ -1,0 +1,1143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Checkers</title>
+    <style>
+      :root {
+        --bg: #f6f1e7;
+        --panel: #fffdf8;
+        --ink: #2a2320;
+        --ink-soft: #6b5d52;
+        --line: #ddd2bf;
+        --gold: #b98a2f;
+        --sq-light: #f0dcc0;
+        --sq-dark: #9c3d33;
+        --sq-dark-edge: #7e2f27;
+        --last: rgba(255, 205, 66, 0.45);
+        --sel: #ffd94d;
+        --red-piece: #c62f24;
+        --red-piece-edge: #8f1d15;
+        --blk-piece: #33333a;
+        --blk-piece-edge: #101014;
+        --accent: #9c3d33;
+        --btn-bg: #efe6d4;
+        --btn-ink: #2a2320;
+        --shadow: 0 10px 30px rgba(60, 40, 20, 0.18);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #17130f;
+          --panel: #221c16;
+          --ink: #f0e7d8;
+          --ink-soft: #b8a891;
+          --line: #3d332a;
+          --gold: #d9ab4a;
+          --sq-light: #d9bd8f;
+          --sq-dark: #7c2d24;
+          --sq-dark-edge: #5f2019;
+          --last: rgba(255, 205, 66, 0.35);
+          --btn-bg: #2e2620;
+          --btn-ink: #f0e7d8;
+          --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: Georgia, "Times New Roman", serif;
+        -webkit-text-size-adjust: 100%;
+      }
+      .wrap {
+        max-width: 1060px;
+        margin: 0 auto;
+        padding: 14px 14px 34px;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      .home-pill {
+        display: inline-block;
+        padding: 7px 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 15px;
+        box-shadow: 0 2px 8px rgba(60, 40, 20, 0.10);
+      }
+      .home-pill:active { transform: translateY(1px); }
+      .sound-btn {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 7px 14px;
+        font-size: 15px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      h1 {
+        text-align: center;
+        font-size: 40px;
+        margin: 4px 0 2px;
+        letter-spacing: 0.5px;
+        font-weight: 700;
+      }
+      .subtitle {
+        text-align: center;
+        color: var(--ink-soft);
+        font-style: italic;
+        margin: 0 0 14px;
+        font-size: 16px;
+      }
+      .layout {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .board-col { flex: 0 1 540px; min-width: 0; width: 100%; max-width: 540px; }
+      .side-col { flex: 1 1 260px; max-width: 360px; min-width: 250px; width: 100%; }
+      .board-frame {
+        background: #5a3a26;
+        padding: 10px;
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+      }
+      @media (prefers-color-scheme: dark) {
+        .board-frame { background: #3a2718; }
+      }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        grid-template-rows: repeat(8, 1fr);
+        aspect-ratio: 1 / 1;
+        width: 100%;
+        border-radius: 4px;
+        overflow: hidden;
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .sq { position: relative; display: flex; align-items: center; justify-content: center; }
+      .sq.light { background: var(--sq-light); }
+      .sq.dark { background: var(--sq-dark); box-shadow: inset 0 0 0 1px var(--sq-dark-edge); }
+      .sq.lastmove::after {
+        content: "";
+        position: absolute; inset: 0;
+        background: var(--last);
+        pointer-events: none;
+      }
+      .sq.dest { cursor: pointer; }
+      .sq.dest::before {
+        content: "";
+        position: absolute;
+        width: 26%; height: 26%;
+        border-radius: 50%;
+        background: rgba(30, 90, 30, 0.55);
+        z-index: 3;
+        pointer-events: none;
+      }
+      .sq.dest.capture::before {
+        width: 82%; height: 82%;
+        background: transparent;
+        border: 4px solid rgba(30, 90, 30, 0.65);
+        border-radius: 50%;
+      }
+      .piece {
+        width: 82%; height: 82%;
+        border-radius: 50%;
+        position: relative;
+        z-index: 2;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer;
+        transition: transform 0.08s ease;
+      }
+      .piece.red {
+        background: radial-gradient(circle at 35% 30%, #e05245, var(--red-piece) 60%, var(--red-piece-edge));
+        box-shadow: 0 3px 0 var(--red-piece-edge), 0 5px 8px rgba(0,0,0,0.35), inset 0 0 0 3px rgba(0,0,0,0.12);
+      }
+      .piece.black {
+        background: radial-gradient(circle at 35% 30%, #5a5a64, var(--blk-piece) 60%, var(--blk-piece-edge));
+        box-shadow: 0 3px 0 var(--blk-piece-edge), 0 5px 8px rgba(0,0,0,0.4), inset 0 0 0 3px rgba(255,255,255,0.10);
+      }
+      .piece::before {
+        content: "";
+        position: absolute;
+        inset: 16%;
+        border-radius: 50%;
+        border: 2px solid rgba(255,255,255,0.22);
+      }
+      .piece.black::before { border-color: rgba(255,255,255,0.18); }
+      .piece.king::after {
+        content: "★";
+        color: #ffd94d;
+        font-size: clamp(14px, 4.6vw, 26px);
+        text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        z-index: 2;
+        line-height: 1;
+      }
+      .piece.king {
+        box-shadow: 0 3px 0 var(--gold), 0 6px 10px rgba(0,0,0,0.4), inset 0 0 0 3px rgba(255,217,77,0.35);
+      }
+      .piece.red.king { box-shadow: 0 3px 0 var(--red-piece-edge), 0 6px 10px rgba(0,0,0,0.4), inset 0 0 0 4px rgba(255,217,77,0.55); }
+      .piece.black.king { box-shadow: 0 3px 0 var(--blk-piece-edge), 0 6px 10px rgba(0,0,0,0.45), inset 0 0 0 4px rgba(255,217,77,0.55); }
+      .piece.selected {
+        outline: 4px solid var(--sel);
+        outline-offset: -2px;
+        transform: scale(1.06);
+      }
+      .piece.mustjump { outline: 3px dashed rgba(255, 217, 77, 0.85); outline-offset: -2px; }
+      .status {
+        text-align: center;
+        font-size: 20px;
+        min-height: 28px;
+        margin: 12px 0 2px;
+        font-weight: 700;
+      }
+      .status-sub {
+        text-align: center;
+        color: var(--ink-soft);
+        font-size: 15px;
+        min-height: 20px;
+        margin: 0 0 6px;
+        font-style: italic;
+      }
+      .captured-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin: 8px 2px 0;
+        font-size: 15px;
+        color: var(--ink-soft);
+        flex-wrap: wrap;
+      }
+      .cap-dot {
+        display: inline-block;
+        width: 13px; height: 13px;
+        border-radius: 50%;
+        vertical-align: -2px;
+        margin: 0 1px;
+      }
+      .cap-dot.red { background: var(--red-piece); box-shadow: inset 0 0 0 2px var(--red-piece-edge); }
+      .cap-dot.black { background: var(--blk-piece); box-shadow: inset 0 0 0 2px var(--blk-piece-edge); }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin-bottom: 14px;
+      }
+      .panel h2 { font-size: 18px; margin: 0 0 10px; }
+      .ctl-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
+      .ctl-row label { font-size: 15px; color: var(--ink-soft); margin-right: 2px; }
+      select, .btn {
+        font-family: inherit;
+        font-size: 15px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: var(--btn-bg);
+        color: var(--btn-ink);
+        cursor: pointer;
+      }
+      .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+      .btn:disabled { opacity: 0.45; cursor: default; }
+      .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+      .seg button {
+        font-family: inherit; font-size: 15px; padding: 8px 12px;
+        background: var(--btn-bg); color: var(--btn-ink); border: 0; cursor: pointer;
+      }
+      .seg button + button { border-left: 1px solid var(--line); }
+      .seg button.on { background: var(--accent); color: #fff; font-weight: 700; }
+      .moves {
+        max-height: 260px;
+        overflow-y: auto;
+        font-size: 15px;
+        line-height: 1.55;
+        font-variant-numeric: tabular-nums;
+      }
+      .moves .row { display: flex; gap: 10px; }
+      .moves .num { color: var(--ink-soft); width: 28px; flex: none; text-align: right; }
+      .moves .mv { flex: 1; }
+      .moves .empty { color: var(--ink-soft); font-style: italic; }
+      .rules { font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+      .rules strong { color: var(--ink); }
+      #selftest-panel {
+        display: none;
+        background: var(--panel);
+        border: 2px solid var(--gold);
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin: 16px auto 0;
+        max-width: 720px;
+        font-size: 14px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <a class="home-pill" href="https://jesuslovestyler.com/">⌂ Home</a>
+        <button class="sound-btn" id="soundBtn" type="button" aria-label="Toggle sound">🔊 Sound on</button>
+      </div>
+
+      <h1>Checkers</h1>
+      <p class="subtitle">American checkers — jump, crown, and leave your opponent nowhere to go.</p>
+
+      <div class="layout">
+        <div class="board-col">
+          <div class="board-frame">
+            <div class="board" id="board" role="grid" aria-label="Checkers board"></div>
+          </div>
+          <p class="status" id="status"></p>
+          <p class="status-sub" id="statusSub"></p>
+          <div class="captured-row">
+            <span id="capByRed"></span>
+            <span id="capByBlack"></span>
+          </div>
+        </div>
+
+        <div class="side-col">
+          <div class="panel">
+            <h2>Game</h2>
+            <div class="ctl-row">
+              <label for="modeSel">Play</label>
+              <select id="modeSel">
+                <option value="cpu">Against the computer</option>
+                <option value="two">Two players</option>
+              </select>
+            </div>
+            <div class="ctl-row" id="diffRow">
+              <label for="diffSel">Strength</label>
+              <select id="diffSel">
+                <option value="easy">Easy</option>
+                <option value="medium" selected>Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+            <div class="ctl-row" id="sideRow">
+              <label>Your side</label>
+              <span class="seg" id="sideSeg">
+                <button type="button" data-side="r">🔴 Red</button>
+                <button type="button" data-side="b">⚫ Black</button>
+              </span>
+            </div>
+            <div class="ctl-row">
+              <button class="btn primary" id="newBtn" type="button">New game</button>
+              <button class="btn" id="undoBtn" type="button">↩ Undo</button>
+            </div>
+            <p class="rules" style="margin:0">Black moves first. Tap one of your pieces, then tap a glowing square to move. Glowing dashed pieces are the ones that must jump.</p>
+          </div>
+
+          <div class="panel">
+            <h2>Moves</h2>
+            <div class="moves" id="moves"><span class="empty">No moves yet.</span></div>
+          </div>
+
+          <div class="panel">
+            <h2>Rules</h2>
+            <p class="rules" style="margin:0">
+              Men move one square diagonally forward; kings move one square diagonally in any direction.
+              <strong>Captures are forced:</strong> if a jump is available you must take it, and a piece that can keep jumping must continue in the same turn.
+              A man that reaches the far rank is crowned king — if it gets there by a jump, the turn ends at once.
+              A player with no pieces left, or no legal move, loses.
+              If both sides are down to a single king each, the game is a draw after 40 moves without a capture.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div id="selftest-panel"></div>
+    </div>
+
+    <script>
+      "use strict";
+      window.__errCount = 0;
+      window.addEventListener("error", function () { window.__errCount++; });
+
+      /* ================= Engine (American / English draughts) ================= */
+      var EMPTY = null;
+      function idx(r, c) { return r * 8 + c; }
+      function rowOf(i) { return Math.floor(i / 8); }
+      function colOf(i) { return i % 8; }
+      function inB(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+      function sideOf(p) { return (p === "r" || p === "R") ? "r" : "b"; }
+      function isKing(p) { return p === "R" || p === "B"; }
+      function opp(s) { return s === "r" ? "b" : "r"; }
+      function dirsFor(p) {
+        if (isKing(p)) return [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+        return p === "r" ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
+      }
+      function startBoard() {
+        var b = new Array(64).fill(EMPTY);
+        for (var r = 0; r < 3; r++)
+          for (var c = 0; c < 8; c++)
+            if ((r + c) % 2 === 1) b[idx(r, c)] = "b";
+        for (var r2 = 5; r2 < 8; r2++)
+          for (var c2 = 0; c2 < 8; c2++)
+            if ((r2 + c2) % 2 === 1) b[idx(r2, c2)] = "r";
+        return b;
+      }
+      /* All capture sequences starting at square i on board b (DFS, full multi-jumps).
+         A man crowned by a jump stops there — the sequence ends. */
+      function captureSeqs(b, i) {
+        var piece = b[i], res = [];
+        if (!piece) return res;
+        var r = rowOf(i), c = colOf(i), side = sideOf(piece);
+        var dirs = dirsFor(piece);
+        for (var d = 0; d < dirs.length; d++) {
+          var dr = dirs[d][0], dc = dirs[d][1];
+          var r1 = r + dr, c1 = c + dc, r2 = r + 2 * dr, c2 = c + 2 * dc;
+          if (!inB(r2, c2)) continue;
+          var mid = b[idx(r1, c1)], land = b[idx(r2, c2)];
+          if (mid && sideOf(mid) !== side && land === EMPTY) {
+            var nb = b.slice();
+            nb[i] = EMPTY; nb[idx(r1, c1)] = EMPTY;
+            var np = piece, crowned = false;
+            if (!isKing(piece) && (r2 === 0 || r2 === 7)) { np = (piece === "r" ? "R" : "B"); crowned = true; }
+            nb[idx(r2, c2)] = np;
+            if (crowned) {
+              res.push({ path: [i, idx(r2, c2)], caps: [idx(r1, c1)] });
+            } else {
+              var subs = captureSeqs(nb, idx(r2, c2));
+              if (subs.length === 0) {
+                res.push({ path: [i, idx(r2, c2)], caps: [idx(r1, c1)] });
+              } else {
+                for (var s = 0; s < subs.length; s++) {
+                  res.push({
+                    path: [i].concat(subs[s].path),
+                    caps: [idx(r1, c1)].concat(subs[s].caps)
+                  });
+                }
+              }
+            }
+          }
+        }
+        return res;
+      }
+      function quietFrom(b, i) {
+        var piece = b[i], res = [];
+        if (!piece) return res;
+        var r = rowOf(i), c = colOf(i), dirs = dirsFor(piece);
+        for (var d = 0; d < dirs.length; d++) {
+          var nr = r + dirs[d][0], nc = c + dirs[d][1];
+          if (inB(nr, nc) && b[idx(nr, nc)] === EMPTY)
+            res.push({ path: [i, idx(nr, nc)], caps: [] });
+        }
+        return res;
+      }
+      /* Legal moves for a side. Captures are forced: if any exist, only they are legal. */
+      function genMoves(b, side) {
+        var caps = [], i, p;
+        for (i = 0; i < 64; i++) {
+          p = b[i];
+          if (p && sideOf(p) === side) caps = caps.concat(captureSeqs(b, i));
+        }
+        if (caps.length) return caps;
+        var quiet = [];
+        for (i = 0; i < 64; i++) {
+          p = b[i];
+          if (p && sideOf(p) === side) quiet = quiet.concat(quietFrom(b, i));
+        }
+        return quiet;
+      }
+      function hasAnyCapture(b, side) {
+        for (var i = 0; i < 64; i++) {
+          var p = b[i];
+          if (p && sideOf(p) === side && captureSeqs(b, i).length) return true;
+        }
+        return false;
+      }
+      function applyMove(b, move) {
+        var nb = b.slice();
+        var from = move.path[0], to = move.path[move.path.length - 1];
+        var piece = nb[from];
+        nb[from] = EMPTY;
+        for (var k = 0; k < move.caps.length; k++) nb[move.caps[k]] = EMPTY;
+        if (!isKing(piece) && (rowOf(to) === 0 || rowOf(to) === 7))
+          piece = (piece === "r" ? "R" : "B");
+        nb[to] = piece;
+        return nb;
+      }
+      /* Apply only the first step of a move (used for interactive multi-jumps and animation). */
+      function applyStep(b, move, stepIndex) {
+        var nb = b.slice();
+        var from = move.path[stepIndex], to = move.path[stepIndex + 1];
+        var piece = nb[from];
+        nb[from] = EMPTY;
+        if (move.caps.length > stepIndex) nb[move.caps[stepIndex]] = EMPTY;
+        if (!isKing(piece) && (rowOf(to) === 0 || rowOf(to) === 7))
+          piece = (piece === "r" ? "R" : "B");
+        nb[to] = piece;
+        return nb;
+      }
+      function countPieces(b, side) {
+        var n = 0, kings = 0, men = 0;
+        for (var i = 0; i < 64; i++) {
+          var p = b[i];
+          if (p && sideOf(p) === side) { n++; if (isKing(p)) kings++; else men++; }
+        }
+        return { total: n, kings: kings, men: men };
+      }
+      function sqName(i) { return "abcdefgh".charAt(colOf(i)) + String(8 - rowOf(i)); }
+      function moveNotation(move) {
+        var sep = move.caps.length ? "x" : "-";
+        var names = [];
+        for (var k = 0; k < move.path.length; k++) names.push(sqName(move.path[k]));
+        return names.join(sep);
+      }
+      function serialize(b) { return b.map(function (p) { return p || "."; }).join(""); }
+
+      /* ================= AI: alpha-beta search ================= */
+      var searchAbort = false, searchStart = 0, searchNodes = 0;
+      function evaluate(b, side) {
+        var score = 0;
+        var mine = countPieces(b, side), theirs = countPieces(b, opp(side));
+        if (theirs.total === 0) return 100000;
+        if (mine.total === 0) return -100000;
+        for (var i = 0; i < 64; i++) {
+          var p = b[i];
+          if (!p) continue;
+          var r = rowOf(i), c = colOf(i), v;
+          if (isKing(p)) {
+            v = 300;
+            if (r >= 2 && r <= 5 && c >= 2 && c <= 5) v += 8;
+          } else {
+            v = 100;
+            var prog = (p === "r") ? (7 - r) : r;
+            v += prog * 7;
+            if ((p === "r" && r === 7) || (p === "b" && r === 0)) v += 14; /* back-rank guard */
+            if (r >= 3 && r <= 4 && c >= 2 && c <= 5) v += 6;               /* centre */
+            if (c === 0 || c === 7) v += 3;                                  /* edge safety */
+          }
+          score += (sideOf(p) === side) ? v : -v;
+        }
+        return score;
+      }
+      function search(b, side, depth, alpha, beta, ply) {
+        searchNodes++;
+        if (searchAbort) return evaluate(b, side);
+        if ((searchNodes & 2047) === 0 && Date.now() - searchStart > 1600) { searchAbort = true; return evaluate(b, side); }
+        var moves = genMoves(b, side);
+        if (moves.length === 0) return -100000 + ply;
+        if (depth === 0) return evaluate(b, side);
+        moves.sort(function (a, c) { return c.caps.length - a.caps.length; });
+        var best = -Infinity;
+        for (var m = 0; m < moves.length; m++) {
+          var sc = -search(applyMove(b, moves[m]), opp(side), depth - 1, -beta, -alpha, ply + 1);
+          if (sc > best) best = sc;
+          if (best > alpha) alpha = best;
+          if (alpha >= beta) break;
+        }
+        return best;
+      }
+      function chooseMove(b, side, diff) {
+        var moves = genMoves(b, side);
+        if (moves.length === 0) return null;
+        if (moves.length === 1) return moves[0];
+        if (diff === "easy" && Math.random() < 0.3)
+          return moves[Math.floor(Math.random() * moves.length)];
+        var depth = diff === "easy" ? 2 : (diff === "medium" ? 5 : 7);
+        searchAbort = false; searchStart = Date.now(); searchNodes = 0;
+        var best = -Infinity, bestMoves = [];
+        moves.sort(function (a, c) { return c.caps.length - a.caps.length; });
+        for (var m = 0; m < moves.length; m++) {
+          var sc = -search(applyMove(b, moves[m]), opp(side), depth - 1, -Infinity, Infinity, 1);
+          if (diff === "easy") sc += Math.random() * 18;
+          if (sc > best + 0.001) { best = sc; bestMoves = [moves[m]]; }
+          else if (Math.abs(sc - best) <= 0.001) bestMoves.push(moves[m]);
+        }
+        return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+      }
+
+      /* ================= Sound (Web Audio, soft) ================= */
+      var audioCtx = null, soundOn = true;
+      try { soundOn = localStorage.getItem("checkers-muted") !== "1"; } catch (e) {}
+      function tone(freq, dur, type, vol, when) {
+        if (!soundOn) return;
+        try {
+          if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          if (audioCtx.state === "suspended") audioCtx.resume();
+          var t = audioCtx.currentTime + (when || 0);
+          var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+          o.type = type || "sine"; o.frequency.value = freq;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(vol || 0.06, t + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          o.connect(g); g.connect(audioCtx.destination);
+          o.start(t); o.stop(t + dur + 0.05);
+        } catch (e) {}
+      }
+      function sndSelect() { tone(660, 0.05, "sine", 0.03); }
+      function sndMove() { tone(190, 0.09, "triangle", 0.07); tone(120, 0.07, "sine", 0.05, 0.01); }
+      function sndCapture() { tone(240, 0.08, "triangle", 0.08); tone(420, 0.1, "sine", 0.06, 0.06); }
+      function sndCrown() { tone(523, 0.1, "sine", 0.05); tone(659, 0.1, "sine", 0.05, 0.09); tone(784, 0.16, "sine", 0.05, 0.18); }
+      function sndWin() { tone(392, 0.14, "sine", 0.06); tone(523, 0.14, "sine", 0.06, 0.13); tone(659, 0.14, "sine", 0.06, 0.26); tone(784, 0.3, "sine", 0.06, 0.39); }
+      function sndBad() { tone(150, 0.1, "square", 0.025); }
+
+      /* ================= Game state ================= */
+      var SAVE_KEY = "checkers-game-v1";
+      var S = null;
+      var animating = false;
+
+      function freshState() {
+        return {
+          board: startBoard(),
+          turn: "b",                       /* Black moves first */
+          mode: "cpu", diff: "medium", side: "r",
+          notations: [],                    /* one string per completed ply */
+          history: [],                      /* snapshot before each ply */
+          quietPlies: 0,                    /* plies since last capture (for the KvK draw) */
+          over: false, winner: null, endReason: "",
+          selected: null, steps: {},        /* steps: destIndex -> candidate moves */
+          partial: null,                    /* {moves:[...], depth:n} mid-jump */
+          lastMove: null
+        };
+      }
+      function snapshot() {
+        return {
+          board: S.board.slice(), turn: S.turn, quietPlies: S.quietPlies,
+          notationsLen: S.notations.length, lastMove: S.lastMove
+        };
+      }
+      function save() {
+        try {
+          localStorage.setItem(SAVE_KEY, JSON.stringify({
+            board: S.board, turn: S.turn, mode: S.mode, diff: S.diff, side: S.side,
+            notations: S.notations, history: S.history, quietPlies: S.quietPlies,
+            over: S.over, winner: S.winner, endReason: S.endReason, lastMove: S.lastMove
+          }));
+        } catch (e) {}
+      }
+      function loadSaved() {
+        try {
+          var raw = localStorage.getItem(SAVE_KEY);
+          if (!raw) return null;
+          var d = JSON.parse(raw);
+          if (!d || !Array.isArray(d.board) || d.board.length !== 64) return null;
+          var st = freshState();
+          st.board = d.board; st.turn = d.turn === "r" ? "r" : "b";
+          st.mode = d.mode === "two" ? "two" : "cpu";
+          st.diff = ["easy", "medium", "hard"].indexOf(d.diff) >= 0 ? d.diff : "medium";
+          st.side = d.side === "b" ? "b" : "r";
+          st.notations = Array.isArray(d.notations) ? d.notations : [];
+          st.history = Array.isArray(d.history) ? d.history : [];
+          st.quietPlies = d.quietPlies | 0;
+          st.over = !!d.over; st.winner = d.winner || null; st.endReason = d.endReason || "";
+          st.lastMove = d.lastMove || null;
+          return st;
+        } catch (e) { return null; }
+      }
+
+      function isCpuTurn() {
+        return S.mode === "cpu" && !S.over && S.turn !== S.side;
+      }
+      /* After a ply completes: record, check endings, hand over. */
+      function finishPly(move, opts) {
+        opts = opts || {};
+        var wasCapture = move.caps.length > 0;
+        var crownedNow = false;
+        var destPiece = S.board[move.path[move.path.length - 1]];
+        var startPieceWasKing = opts.startPieceWasKing;
+        if (destPiece && isKing(destPiece) && !startPieceWasKing) crownedNow = true;
+
+        S.notations.push(moveNotation(move));
+        S.lastMove = { from: move.path[0], to: move.path[move.path.length - 1] };
+        S.quietPlies = wasCapture ? 0 : S.quietPlies + 1;
+        S.selected = null; S.steps = {}; S.partial = null;
+
+        var mover = S.turn;
+        S.turn = opp(S.turn);
+
+        /* Endings: opponent has no pieces or no legal move -> mover wins. */
+        var legal = genMoves(S.board, S.turn);
+        var counts = countPieces(S.board, S.turn);
+        if (counts.total === 0) {
+          S.over = true; S.winner = mover;
+          S.endReason = (mover === "r" ? "Red" : "Black") + " wins — " +
+            (S.turn === "r" ? "Red" : "Black") + " has no pieces left.";
+        } else if (legal.length === 0) {
+          S.over = true; S.winner = mover;
+          S.endReason = (mover === "r" ? "Red" : "Black") + " wins — " +
+            (S.turn === "r" ? "Red" : "Black") + " has no legal move.";
+        } else {
+          /* Draw: one king apiece and 40 moves (80 plies) without a capture. */
+          var cr = countPieces(S.board, "r"), cb = countPieces(S.board, "b");
+          if (cr.total === 1 && cr.kings === 1 && cb.total === 1 && cb.kings === 1 && S.quietPlies >= 80) {
+            S.over = true; S.winner = null;
+            S.endReason = "Draw — one king apiece and 40 moves without a capture.";
+          }
+        }
+        if (!opts.silent) {
+          if (S.over) { if (S.winner) sndWin(); }
+          else if (crownedNow) sndCrown();
+          else if (wasCapture) sndCapture();
+          else sndMove();
+        }
+        save();
+        render();
+        maybeCpu();
+      }
+      /* Begin a ply: snapshot for undo, then apply the full move at once. */
+      function performMove(move, opts) {
+        opts = opts || {};
+        S.history.push(snapshot());
+        var startPiece = S.board[move.path[0]];
+        S.board = applyMove(S.board, move);
+        finishPly(move, { silent: opts.silent, startPieceWasKing: isKing(startPiece) });
+      }
+      function maybeCpu() {
+        if (!isCpuTurn() || animating) return;
+        animating = true;
+        render();
+        setTimeout(function () {
+          if (!isCpuTurn()) { animating = false; render(); return; }
+          var move = chooseMove(S.board, S.turn, S.diff);
+          animating = false;
+          if (!move) { render(); return; }
+          /* Animate multi-jumps step by step. */
+          S.history.push(snapshot());
+          var startPiece = S.board[move.path[0]];
+          var step = 0;
+          function doStep() {
+            S.board = applyStep(S.board, move, step);
+            S.lastMove = { from: move.path[step], to: move.path[step + 1] };
+            if (move.caps.length) sndCapture(); else sndMove();
+            render();
+            step++;
+            if (step < move.path.length - 1) setTimeout(doStep, 300);
+            else finishPly(move, { startPieceWasKing: isKing(startPiece) });
+          }
+          doStep();
+        }, 380);
+      }
+
+      /* ============ Interactive stepping (tap piece, tap destination) ============ */
+      function legalStepsFor(square) {
+        /* Returns {destIndex: [candidateMoves]} for the piece on square, honoring
+           forced captures and mid-jump continuation. Empty if the piece may not move. */
+        var out = {};
+        if (S.over || animating) return out;
+        var piece = S.board[square];
+        if (!piece || sideOf(piece) !== S.turn) return out;
+        var cands;
+        if (S.partial) {
+          if (square !== S.selected) return out;
+          cands = S.partial.moves;
+          var depth = S.partial.depth;
+          for (var m = 0; m < cands.length; m++) {
+            var dest = cands[m].path[depth + 1];
+            if (!out[dest]) out[dest] = [];
+            out[dest].push(cands[m]);
+          }
+          return out;
+        }
+        var all = genMoves(S.board, S.turn);
+        for (var k = 0; k < all.length; k++) {
+          if (all[k].path[0] === square) {
+            var d2 = all[k].path[1];
+            if (!out[d2]) out[d2] = [];
+            out[d2].push(all[k]);
+          }
+        }
+        return out;
+      }
+      function selectSquare(square, silent) {
+        var steps = legalStepsFor(square);
+        if (Object.keys(steps).length === 0) return false;
+        S.selected = square; S.steps = steps;
+        if (!silent) sndSelect();
+        render();
+        return true;
+      }
+      /* Attempt one step from the selected square to dest. Returns true if accepted.
+         A non-capturing step while a capture exists is refused (never offered). */
+      function tryStep(dest) {
+        if (S.selected === null || !S.steps[dest]) { sndBad(); return false; }
+        var cands = S.steps[dest];
+        var depth = S.partial ? S.partial.depth : 0;
+        var move = cands[0];
+        var isCaptureStep = move.caps.length > depth;
+
+        if (!S.partial) S.history.push(snapshot());
+        var startPiece = S.board[move.path[0]];
+        S.board = applyStep(S.board, move, depth);
+        S.lastMove = { from: move.path[depth], to: dest };
+        depth++;
+
+        var continues = cands.some(function (m) { return m.path.length - 1 > depth; });
+        if (continues) {
+          S.partial = { moves: cands, depth: depth };
+          S.selected = dest;
+          S.steps = legalStepsFor(dest);
+          if (isCaptureStep) sndCapture(); else sndMove();
+          render();
+          return true;
+        }
+        /* Turn complete. */
+        var full = cands[0];
+        S.partial = null;
+        finishPly(full, { startPieceWasKing: isKing(startPiece) });
+        return true;
+      }
+      function onSquareTap(i) {
+        if (S.over || animating || isCpuTurn()) return;
+        if (S.selected !== null && S.steps[i]) { tryStep(i); return; }
+        if (S.partial) { sndBad(); return; }   /* mid-jump: must continue with same piece */
+        var p = S.board[i];
+        if (p && sideOf(p) === S.turn) {
+          if (i === S.selected) { S.selected = null; S.steps = {}; render(); return; }
+          if (!selectSquare(i)) sndBad();
+        } else if (S.selected !== null) {
+          sndBad();                              /* tapped a square that is not a legal move */
+        }
+      }
+
+      /* ================= Undo / new game ================= */
+      function undo() {
+        if (animating || S.partial || S.history.length === 0) return;
+        var n = (S.mode === "cpu") ? 2 : 1;
+        if (S.history.length < n) n = S.history.length;
+        var targetIndex = S.history.length - n;
+        var snap = S.history[targetIndex];
+        S.history = S.history.slice(0, targetIndex);
+        S.board = snap.board.slice();
+        S.turn = snap.turn;
+        S.quietPlies = snap.quietPlies;
+        S.notations = S.notations.slice(0, snap.notationsLen);
+        S.lastMove = snap.lastMove;
+        S.over = false; S.winner = null; S.endReason = "";
+        S.selected = null; S.steps = {}; S.partial = null;
+        save(); render(); maybeCpu();
+      }
+      function newGame() {
+        var keep = { mode: S.mode, diff: S.diff, side: S.side };
+        S = freshState();
+        S.mode = keep.mode; S.diff = keep.diff; S.side = keep.side;
+        save(); render(); maybeCpu();
+      }
+      /* Load an arbitrary position (used by the self-tests). */
+      function loadPosition(boardArr, turn, opts) {
+        opts = opts || {};
+        var keep = { mode: S.mode, diff: S.diff, side: S.side };
+        S = freshState();
+        S.mode = opts.mode || "two"; S.diff = keep.diff; S.side = keep.side;
+        S.board = boardArr.slice();
+        S.turn = turn;
+        S.history = []; S.notations = [];
+        /* Does the side to move already have no move? Then the game is over. */
+        var legal = genMoves(S.board, S.turn);
+        var counts = countPieces(S.board, S.turn);
+        if (counts.total === 0 || legal.length === 0) {
+          S.over = true; S.winner = opp(S.turn);
+          S.endReason = (S.winner === "r" ? "Red" : "Black") + " wins — " +
+            (S.turn === "r" ? "Red" : "Black") +
+            (counts.total === 0 ? " has no pieces left." : " has no legal move.");
+        }
+        save(); render();
+      }
+
+      /* ================= Rendering ================= */
+      var boardEl = document.getElementById("board");
+      var statusEl = document.getElementById("status");
+      var statusSubEl = document.getElementById("statusSub");
+      var movesEl = document.getElementById("moves");
+      var undoBtn = document.getElementById("undoBtn");
+      var sqEls = [];
+      (function buildSquares() {
+        for (var i = 0; i < 64; i++) {
+          var d = document.createElement("div");
+          d.className = "sq " + (((rowOf(i) + colOf(i)) % 2 === 0) ? "light" : "dark");
+          d.setAttribute("role", "gridcell");
+          (function (sq) {
+            d.addEventListener("click", function () { onSquareTap(sq); });
+          })(i);
+          boardEl.appendChild(d);
+          sqEls.push(d);
+        }
+      })();
+
+      function render() {
+        var mustJumpFrom = {};
+        if (!S.over && !S.partial) {
+          if (hasAnyCapture(S.board, S.turn)) {
+            var ms = genMoves(S.board, S.turn);
+            for (var m = 0; m < ms.length; m++) mustJumpFrom[ms[m].path[0]] = true;
+          }
+        }
+        for (var i = 0; i < 64; i++) {
+          var el = sqEls[i];
+          var p = S.board[i];
+          el.className = "sq " + (((rowOf(i) + colOf(i)) % 2 === 0) ? "light" : "dark");
+          if (S.lastMove && (S.lastMove.from === i || S.lastMove.to === i)) el.className += " lastmove";
+          if (S.selected !== null && S.steps[i]) el.className += " dest" + (isDestCapture(i) ? " capture" : "");
+          el.innerHTML = "";
+          if (p) {
+            var pd = document.createElement("div");
+            pd.className = "piece " + (sideOf(p) === "r" ? "red" : "black") + (isKing(p) ? " king" : "");
+            if (i === S.selected) pd.className += " selected";
+            else if (mustJumpFrom[i] && sideOf(p) === S.turn && !isCpuTurn()) pd.className += " mustjump";
+            el.appendChild(pd);
+          }
+        }
+        /* Status */
+        if (S.over) {
+          statusEl.textContent = S.winner
+            ? (S.winner === "r" ? "🔴 Red wins!" : "⚫ Black wins!")
+            : "It's a draw.";
+          statusSubEl.textContent = S.endReason;
+        } else if (S.partial) {
+          statusEl.textContent = (S.turn === "r" ? "🔴 Red" : "⚫ Black") + " jumped — jump again!";
+          statusSubEl.textContent = "That piece can keep jumping, so the turn continues.";
+        } else if (isCpuTurn()) {
+          statusEl.textContent = "Computer (" + (S.turn === "r" ? "🔴 Red" : "⚫ Black") + ") is thinking…";
+          statusSubEl.textContent = "";
+        } else {
+          statusEl.textContent = (S.turn === "r" ? "🔴 Red" : "⚫ Black") + " to move" +
+            (S.mode === "two" ? "" : " — your move");
+          var cr = countPieces(S.board, "r"), cb = countPieces(S.board, "b");
+          if (cr.total === 1 && cr.kings === 1 && cb.total === 1 && cb.kings === 1) {
+            var left = Math.max(0, 40 - Math.floor(S.quietPlies / 2));
+            statusSubEl.textContent = "One king apiece — draw in " + left + " moves without a capture.";
+          } else if (Object.keys(mustJumpFrom).length) {
+            statusSubEl.textContent = "A jump is available — captures are forced.";
+          } else {
+            statusSubEl.textContent = "";
+          }
+        }
+        /* Captured counts */
+        var reds = countPieces(S.board, "r"), blacks = countPieces(S.board, "b");
+        document.getElementById("capByRed").innerHTML =
+          "🔴 Red has captured " + (12 - blacks.total) + " " + dots("black", 12 - blacks.total);
+        document.getElementById("capByBlack").innerHTML =
+          "⚫ Black has captured " + (12 - reds.total) + " " + dots("red", 12 - reds.total);
+        /* Move list */
+        if (S.notations.length === 0) {
+          movesEl.innerHTML = '<span class="empty">No moves yet.</span>';
+        } else {
+          var html = "";
+          for (var k = 0; k < S.notations.length; k += 2) {
+            html += '<div class="row"><span class="num">' + (k / 2 + 1) + '.</span>' +
+              '<span class="mv">' + S.notations[k] + '</span>' +
+              '<span class="mv">' + (S.notations[k + 1] || "") + '</span></div>';
+          }
+          movesEl.innerHTML = html;
+          movesEl.scrollTop = movesEl.scrollHeight;
+        }
+        undoBtn.disabled = animating || !!S.partial || S.history.length === 0 || isCpuTurn();
+      }
+      function isDestCapture(dest) {
+        var cands = S.steps[dest];
+        if (!cands || !cands.length) return false;
+        var depth = S.partial ? S.partial.depth : 0;
+        return cands[0].caps.length > depth;
+      }
+      function dots(cls, n) {
+        var s = "";
+        for (var i = 0; i < n; i++) s += '<span class="cap-dot ' + cls + '"></span>';
+        return s;
+      }
+
+      /* ================= Controls ================= */
+      var modeSel = document.getElementById("modeSel");
+      var diffSel = document.getElementById("diffSel");
+      var diffRow = document.getElementById("diffRow");
+      var sideRow = document.getElementById("sideRow");
+      var sideSeg = document.getElementById("sideSeg");
+      var soundBtn = document.getElementById("soundBtn");
+
+      function syncControls() {
+        modeSel.value = S.mode;
+        diffSel.value = S.diff;
+        diffRow.style.display = S.mode === "cpu" ? "" : "none";
+        sideRow.style.display = S.mode === "cpu" ? "" : "none";
+        var btns = sideSeg.querySelectorAll("button");
+        for (var i = 0; i < btns.length; i++)
+          btns[i].classList.toggle("on", btns[i].getAttribute("data-side") === S.side);
+        soundBtn.textContent = soundOn ? "🔊 Sound on" : "🔇 Sound off";
+      }
+      modeSel.addEventListener("change", function () { S.mode = modeSel.value; syncControls(); newGame(); });
+      diffSel.addEventListener("change", function () { S.diff = diffSel.value; save(); syncControls(); });
+      sideSeg.addEventListener("click", function (e) {
+        var b = e.target.closest("button");
+        if (!b) return;
+        S.side = b.getAttribute("data-side");
+        syncControls(); newGame();
+      });
+      document.getElementById("newBtn").addEventListener("click", function () { newGame(); });
+      undoBtn.addEventListener("click", function () { undo(); });
+      soundBtn.addEventListener("click", function () {
+        soundOn = !soundOn;
+        try { localStorage.setItem("checkers-muted", soundOn ? "0" : "1"); } catch (e) {}
+        syncControls();
+        if (soundOn) sndSelect();
+      });
+
+      /* ================= Init ================= */
+      S = loadSaved() || freshState();
+      syncControls();
+      render();
+      maybeCpu();
+
+      /* ================= Self-tests (run with ?selftest=1) ================= */
+      function emptyBoard() { return new Array(64).fill(EMPTY); }
+      function runSelfTests() {
+        animating = false;   /* tests drive positions directly; no CPU move is in flight */
+        var results = [];
+        function t(name, fn) {
+          try { results.push({ name: name, pass: !!fn(), detail: "" }); }
+          catch (e) { results.push({ name: name, pass: false, detail: String(e && e.message || e) }); }
+        }
+        var savedMode = S.mode;
+
+        t("1. Forced capture: a non-capturing move is refused", function () {
+          var b = emptyBoard();
+          b[idx(5, 2)] = "r"; b[idx(4, 3)] = "b";      /* red man can jump to (3,4) */
+          b[idx(5, 6)] = "r";                            /* red man with only quiet moves */
+          b[idx(0, 1)] = "b";
+          loadPosition(b, "r", { mode: "two" });
+          var legal = genMoves(S.board, "r");
+          if (!legal.length || !legal.every(function (m) { return m.caps.length > 0; })) return false;
+          var before = serialize(S.board);
+          if (selectSquare(idx(5, 6))) return false;    /* non-capturing piece cannot be selected */
+          if (serialize(S.board) !== before) return false;
+          if (!selectSquare(idx(5, 2))) return false;    /* capturing piece selects fine */
+          var dests = Object.keys(S.steps);
+          if (dests.length !== 1 || Number(dests[0]) !== idx(3, 4)) return false;
+          if (S.steps[idx(4, 1)]) return false;          /* a quiet destination is not offered */
+          return serialize(S.board) === before;
+        });
+
+        t("2. Double jump executes in one turn and removes both pieces", function () {
+          var b = emptyBoard();
+          b[idx(5, 2)] = "r"; b[idx(4, 3)] = "b"; b[idx(2, 5)] = "b";
+          b[idx(0, 7)] = "b";
+          loadPosition(b, "r", { mode: "two" });
+          var mv = genMoves(S.board, "r").filter(function (m) { return m.caps.length === 2; })[0];
+          if (!mv) return false;
+          performMove(mv, { silent: true });
+          return S.board[idx(1, 6)] === "r" && S.board[idx(4, 3)] === EMPTY &&
+                 S.board[idx(2, 5)] === EMPTY && S.turn === "b" && !S.over;
+        });
+
+        t("3. Man crowned by a jump ends the turn at once", function () {
+          var b = emptyBoard();
+          b[idx(2, 1)] = "r"; b[idx(1, 2)] = "b"; b[idx(1, 4)] = "b";
+          loadPosition(b, "r", { mode: "two" });
+          var mv = genMoves(S.board, "r")[0];
+          if (!mv || mv.caps.length !== 1) return false;
+          performMove(mv, { silent: true });
+          /* Crowned on (0,3); as a king it *could* jump back over (1,4) to (2,5) — but must not. */
+          return S.board[idx(0, 3)] === "R" && S.board[idx(1, 4)] === "b" && S.turn === "b";
+        });
+
+        t("4. King moves and captures backward", function () {
+          var b = emptyBoard();
+          b[idx(3, 3)] = "R"; b[idx(0, 1)] = "b";
+          loadPosition(b, "r", { mode: "two" });
+          var quiet = genMoves(S.board, "r");
+          var hasBack = quiet.some(function (m) { return m.path[1] === idx(4, 2) || m.path[1] === idx(4, 4); });
+          if (!hasBack) return false;
+          var b2 = emptyBoard();
+          b2[idx(3, 3)] = "R"; b2[idx(4, 4)] = "b"; b2[idx(0, 1)] = "b";
+          loadPosition(b2, "r", { mode: "two" });
+          var cap = genMoves(S.board, "r").filter(function (m) { return m.caps.length === 1; })[0];
+          if (!cap || cap.path[cap.path.length - 1] !== idx(5, 5)) return false;
+          performMove(cap, { silent: true });
+          return S.board[idx(5, 5)] === "R" && S.board[idx(4, 4)] === EMPTY;
+        });
+
+        t("5. Blocking a side's last legal move ends the game, correct winner", function () {
+          var b = emptyBoard();
+          b[idx(6, 0)] = "b";              /* black man: (7,1) blocked, jump landing off-board */
+          b[idx(7, 1)] = "r";
+          b[idx(3, 3)] = "r";
+          loadPosition(b, "b", { mode: "two" });
+          return S.over === true && S.winner === "r";
+        });
+
+        t("6. Computer makes only legal moves across a full self-played game", function () {
+          loadPosition(startBoard(), "b", { mode: "two" });
+          S.history = []; S.notations = [];
+          var plies = 0;
+          while (!S.over && plies < 600) {
+            var legal = genMoves(S.board, S.turn);
+            if (legal.length === 0) return false;
+            var mv = chooseMove(S.board, S.turn, "easy");
+            if (!mv) return false;
+            var key = JSON.stringify(mv.path) + "|" + JSON.stringify(mv.caps);
+            var isLegal = legal.some(function (m) {
+              return JSON.stringify(m.path) + "|" + JSON.stringify(m.caps) === key;
+            });
+            if (!isLegal) return false;
+            performMove(mv, { silent: true });
+            plies++;
+          }
+          return S.over === true && plies > 10;
+        });
+
+        t("7. Undo restores the exact prior position", function () {
+          loadPosition(startBoard(), "b", { mode: "two" });
+          var before = serialize(S.board);
+          var m1 = genMoves(S.board, "b")[0];
+          performMove(m1, { silent: true });
+          undo();
+          return serialize(S.board) === before && S.turn === "b" && S.notations.length === 0;
+        });
+
+        t("8. Position persists across a reload (localStorage round-trip)", function () {
+          var b = emptyBoard();
+          b[idx(4, 3)] = "R"; b[idx(3, 4)] = "b"; b[idx(6, 5)] = "r";
+          loadPosition(b, "b", { mode: "two" });
+          var want = serialize(S.board);
+          var restored = loadSaved();
+          return !!restored && serialize(restored.board) === want && restored.turn === "b";
+        });
+
+        t("9. Zero console errors so far", function () {
+          return window.__errCount === 0;
+        });
+
+        /* Restore a clean, fresh game for the player. */
+        S.mode = savedMode === "two" ? "two" : "cpu";
+        newGame();
+        return results;
+      }
+      window.CheckersGame = {
+        runSelfTests: runSelfTests,
+        genMoves: genMoves, startBoard: startBoard,
+        state: function () { return S; }
+      };
+      if (/[?&]selftest=1/.test(location.search)) {
+        setTimeout(function () {
+          var res = runSelfTests();
+          window.__testResults = res;
+          var panel = document.getElementById("selftest-panel");
+          panel.style.display = "block";
+          var lines = res.map(function (r) {
+            return (r.pass ? "PASS" : "FAIL") + " — " + r.name + (r.detail ? " (" + r.detail + ")" : "");
+          });
+          var passed = res.filter(function (r) { return r.pass; }).length;
+          panel.textContent = "Self-tests: " + passed + "/" + res.length + " passed\n\n" + lines.join("\n");
+          document.title = "Checkers — tests " + passed + "/" + res.length;
+        }, 60);
+      }
+    </script>
+    <script data-goatcounter="https://jesuslovestyler.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+  </body>
+</html>
